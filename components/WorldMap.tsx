@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, useWindowDimensions, ScrollView } from 'react-n
 import { useEffect, useState } from 'react';
 import { Country } from '@/data/gameData';
 import * as topojson from 'topojson-client';
+import Svg, { Path } from 'react-native-svg';
 
 interface WorldMapProps {
   availableCountries: Country[];
@@ -70,7 +71,6 @@ export function WorldMap({
   onCountrySelect,
 }: WorldMapProps) {
   const [geographies, setGeographies] = useState<GeoFeature[]>([]);
-  const [hoveredGeo, setHoveredGeo] = useState<string | null>(null);
   const { width: screenWidth } = useWindowDimensions();
 
   useEffect(() => {
@@ -104,7 +104,7 @@ export function WorldMap({
     return availableCountries.find(c => countryCodeMap[c.code] === geoId) || null;
   };
 
-  const getFillColor = (country: Country | null, geoId: string): string => {
+  const getFillColor = (country: Country | null): string => {
     if (!country) return '#E5E7EB';
 
     if (selectedCountry?.code === country.code) {
@@ -115,20 +115,17 @@ export function WorldMap({
       return '#FBBF24';
     }
 
-    if (hoveredGeo === geoId) {
-      return '#10B981';
-    }
-
     return '#34D399';
   };
 
-  const pathToSvg = (geometry: any, scale: number, translate: [number, number]): string => {
+  const pathToSvg = (geometry: any): string => {
     const path: string[] = [];
 
     const project = (coords: [number, number]): [number, number] => {
+      const [lon, lat] = coords;
       return [
-        (coords[0] - translate[0]) * scale,
-        (translate[1] - coords[1]) * scale
+        (lon + 180) / 360 * 960,
+        (90 - lat) / 180 * 500,
       ];
     };
 
@@ -152,7 +149,7 @@ export function WorldMap({
     return path.join(' ');
   };
 
-  const handleClick = (geoId: string) => {
+  const handlePress = (geoId: string) => {
     const country = getCountryByGeoId(geoId);
     if (country && availableCountryCodes.has(geoId)) {
       onCountrySelect(country);
@@ -160,9 +157,7 @@ export function WorldMap({
   };
 
   const mapWidth = Math.min(screenWidth - 40, 1000);
-  const mapHeight = mapWidth * 0.5625;
-  const scale = mapWidth / 960;
-  const translate: [number, number] = [480, 300];
+  const mapHeight = mapWidth * (500 / 960);
 
   return (
     <View style={styles.container}>
@@ -174,36 +169,30 @@ export function WorldMap({
         showsHorizontalScrollIndicator={false}
       >
         <View style={styles.mapWrapper}>
-          <svg
-            width={mapWidth}
-            height={mapHeight}
-            viewBox={`0 0 960 600`}
-            style={{ backgroundColor: '#7DD3FC', borderRadius: 12 }}
-          >
-            {geographies.map((geo) => {
-              const geoId = geo.properties?.id || geo.id;
-              const country = getCountryByGeoId(geoId);
-              const isClickable = country && availableCountryCodes.has(geoId);
-              const fillColor = getFillColor(country, geoId);
+          <View style={[styles.mapContainer, { width: mapWidth, height: mapHeight }]}>
+            <Svg
+              width={mapWidth}
+              height={mapHeight}
+              viewBox="0 0 960 500"
+            >
+              {geographies.map((geo) => {
+                const geoId = geo.properties?.id || geo.id;
+                const country = getCountryByGeoId(geoId);
+                const fillColor = getFillColor(country);
 
-              return (
-                <path
-                  key={geoId}
-                  d={pathToSvg(geo.geometry, 1, translate)}
-                  fill={fillColor}
-                  stroke="#FFFFFF"
-                  strokeWidth="0.5"
-                  style={{
-                    cursor: isClickable ? 'pointer' : 'default',
-                    transition: 'fill 0.2s ease',
-                  }}
-                  onMouseEnter={() => isClickable && setHoveredGeo(geoId)}
-                  onMouseLeave={() => setHoveredGeo(null)}
-                  onClick={() => handleClick(geoId)}
-                />
-              );
-            })}
-          </svg>
+                return (
+                  <Path
+                    key={geoId}
+                    d={pathToSvg(geo.geometry)}
+                    fill={fillColor}
+                    stroke="#FFFFFF"
+                    strokeWidth={0.5}
+                    onPress={() => handlePress(geoId)}
+                  />
+                );
+              })}
+            </Svg>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -238,5 +227,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 20,
+  },
+  mapContainer: {
+    backgroundColor: '#7DD3FC',
+    borderRadius: 12,
+    overflow: 'hidden',
   },
 });
