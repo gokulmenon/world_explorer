@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, useWindowDimensions, ScrollView } from 'react-native';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { useEffect, useState } from 'react';
 import { Country } from '@/data/gameData';
 import * as topojson from 'topojson-client';
@@ -142,15 +142,8 @@ export function WorldMap({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.instructionText}>Tap a country to select it</Text>
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        showsHorizontalScrollIndicator={false}
-      >
-        <View style={styles.mapWrapper}>
-          <View style={[styles.mapContainer, { width: mapWidth, height: mapHeight }]}>
+      <View style={styles.mapWrapper}>
+        <View style={[styles.mapContainer, { width: mapWidth, height: mapHeight }]}>
             <Svg
               width={mapWidth}
               height={mapHeight}
@@ -178,7 +171,6 @@ export function WorldMap({
             </Svg>
           </View>
         </View>
-      </ScrollView>
     </View>
   );
 }
@@ -187,29 +179,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#E0F2FE',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-  },
-  instructionText: {
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    margin: 20,
-    marginBottom: 8,
+    alignItems: 'center',
   },
   mapWrapper: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 8,
   },
   mapContainer: {
     backgroundColor: '#7DD3FC',
