@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Alert } from 'react-native';
 import { Lightbulb } from 'lucide-react-native';
 import { StatusBar } from './StatusBar';
 import { WorldMap } from './WorldMap';
@@ -22,6 +22,7 @@ export function GameScreen() {
   const [isComplete, setIsComplete] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [incorrectCountries, setIncorrectCountries] = useState<Country[]>([]);
 
   useEffect(() => {
     initGame();
@@ -63,6 +64,7 @@ export function GameScreen() {
     setIsComplete(false);
     setSelectedCountry(null);
     setShowConfirmDialog(false);
+    setIncorrectCountries([]);
   };
 
   const handleCountrySelect = (country: Country) => {
@@ -74,6 +76,10 @@ export function GameScreen() {
     if (!selectedCountry || !targetCountry) return;
 
     const isCorrect = selectedCountry.code === targetCountry.code;
+    const tappedCountry = selectedCountry;
+
+    setShowConfirmDialog(false);
+    setSelectedCountry(null);
 
     if (isCorrect) {
       const timeTaken = Math.floor((Date.now() - questionStartTime) / 1000);
@@ -83,14 +89,13 @@ export function GameScreen() {
       const earnedScore = Math.max(baseScore * levelMultiplier - hintPenalty, 50);
 
       setScore((prev) => prev + earnedScore);
-      advanceToNextCountry();
+      Alert.alert('Correct!', 'Great job.', [{ text: 'Next', onPress: advanceToNextCountry }]);
     } else {
       setScore((prev) => Math.max(prev - 100, 0));
       setQuestionStartTime((prev) => prev - 20000);
+      setIncorrectCountries((prev) => [...prev, tappedCountry]);
+      Alert.alert('Incorrect', "That's not the right country. Try again!");
     }
-
-    setShowConfirmDialog(false);
-    setSelectedCountry(null);
   };
 
   const handleConfirmNo = () => {
@@ -120,6 +125,7 @@ export function GameScreen() {
     setQuestionTime(0);
     setHintUsed(false);
     setShowingContinent(null);
+    setIncorrectCountries([]);
   };
 
   const handleHint = () => {
@@ -165,6 +171,7 @@ export function GameScreen() {
         <WorldMap
           availableCountries={currentLevelCountries}
           selectedCountry={selectedCountry}
+          incorrectCountries={incorrectCountries}
           highlightedContinent={showingContinent}
           onCountrySelect={handleCountrySelect}
         />

@@ -9,6 +9,7 @@ import type { Feature, FeatureCollection } from 'geojson';
 interface WorldMapProps {
   availableCountries: Country[];
   selectedCountry: Country | null;
+  incorrectCountries: Country[];
   highlightedContinent: string | null;
   onCountrySelect: (country: Country) => void;
 }
@@ -59,6 +60,7 @@ const countryCodeMap: Record<string, string> = {
 export function WorldMap({
   availableCountries,
   selectedCountry,
+  incorrectCountries,
   highlightedContinent,
   onCountrySelect,
 }: WorldMapProps) {
@@ -98,6 +100,10 @@ export function WorldMap({
 
     if (selectedCountry?.code === country.code) {
       return '#3B82F6';
+    }
+
+    if (incorrectCountries.some(c => c.code === country.code)) {
+      return '#EF4444';
     }
 
     if (highlightedContinent === country.continent) {
