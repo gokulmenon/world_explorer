@@ -184,7 +184,7 @@ export function GameScreen() {
 
       <ConfirmationDialog
         visible={showConfirmDialog}
-        countryName={selectedCountry?.name || ''}
+        countryName={targetCountry?.name || ''}
         onYes={handleConfirmYes}
         onNo={handleConfirmNo}
       />
