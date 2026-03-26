@@ -120,16 +120,25 @@ export function WorldMap({
     }
   };
 
-  const mapWidth = Math.min(screenWidth - 40, 1000);
+  const mapWidth = Math.min(screenWidth - 16, 1200);
   const mapHeight = mapWidth * (500 / 960);
 
-  // Build a d3-geo Mercator projection fitted to the loaded world data.
-  // geoMercator + geoPath handle antimeridian crossing natively, which
-  // prevents the horizontal-line tearing artifacts from naïve equirectangular math.
-  const projection = geojsonData
-    ? geoMercator().fitSize([960, 500], geojsonData)
-    : null;
-  const pathGenerator = projection ? geoPath().projection(projection) : null;
+  // Fit the Mercator projection to only the habitable-world bounding box
+  // (lat -56° to 72°) so that Antarctica and the Arctic are excluded.
+  // This makes the main land masses significantly larger and easier to tap.
+  const habitableWorld = {
+    type: 'Feature' as const,
+    geometry: {
+      type: 'Polygon' as const,
+      coordinates: [[
+        [-179.9, -56], [179.9, -56], [179.9, 72],
+        [-179.9, 72], [-179.9, -56],
+      ]],
+    },
+    properties: {},
+  };
+  const projection = geoMercator().fitSize([960, 500], habitableWorld as Feature);
+  const pathGenerator = geoPath().projection(projection);
 
   return (
     <View style={styles.container}>
@@ -147,7 +156,7 @@ export function WorldMap({
               height={mapHeight}
               viewBox="0 0 960 500"
             >
-              {geojsonData && pathGenerator && geojsonData.features.map((feature: Feature) => {
+              {geojsonData && geojsonData.features.map((feature: Feature) => {
                 const geoId = feature.properties?.id || feature.id;
                 const country = getCountryByGeoId(geoId);
                 const fillColor = getFillColor(country);
@@ -200,8 +209,7 @@ const styles = StyleSheet.create({
   mapWrapper: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingVertical: 8,
   },
   mapContainer: {
     backgroundColor: '#7DD3FC',

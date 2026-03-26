@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { Lightbulb } from 'lucide-react-native';
 import { StatusBar } from './StatusBar';
 import { WorldMap } from './WorldMap';
 import { ConfirmationDialog } from './ConfirmationDialog';
+import { FeedbackDialog } from './FeedbackDialog';
 import { VictoryModal } from './VictoryModal';
 import { Country, initializeGame } from '@/data/gameData';
 
@@ -23,6 +24,7 @@ export function GameScreen() {
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [incorrectCountries, setIncorrectCountries] = useState<Country[]>([]);
+  const [feedbackState, setFeedbackState] = useState<{ isCorrect: boolean; earnedScore?: number } | null>(null);
 
   useEffect(() => {
     initGame();
@@ -65,6 +67,7 @@ export function GameScreen() {
     setSelectedCountry(null);
     setShowConfirmDialog(false);
     setIncorrectCountries([]);
+    setFeedbackState(null);
   };
 
   const handleCountrySelect = (country: Country) => {
@@ -89,13 +92,22 @@ export function GameScreen() {
       const earnedScore = Math.max(baseScore * levelMultiplier - hintPenalty, 50);
 
       setScore((prev) => prev + earnedScore);
-      Alert.alert('Correct!', 'Great job.', [{ text: 'Next', onPress: advanceToNextCountry }]);
+      setFeedbackState({ isCorrect: true, earnedScore });
     } else {
       setScore((prev) => Math.max(prev - 100, 0));
       setQuestionStartTime((prev) => prev - 20000);
       setIncorrectCountries((prev) => [...prev, tappedCountry]);
-      Alert.alert('Incorrect', "That's not the right country. Try again!");
+      setFeedbackState({ isCorrect: false });
     }
+  };
+
+  const handleFeedbackNext = () => {
+    setFeedbackState(null);
+    advanceToNextCountry();
+  };
+
+  const handleFeedbackDismiss = () => {
+    setFeedbackState(null);
   };
 
   const handleConfirmNo = () => {
@@ -194,6 +206,14 @@ export function GameScreen() {
         countryName={targetCountry?.name || ''}
         onYes={handleConfirmYes}
         onNo={handleConfirmNo}
+      />
+
+      <FeedbackDialog
+        visible={feedbackState !== null}
+        isCorrect={feedbackState?.isCorrect ?? false}
+        earnedScore={feedbackState?.earnedScore}
+        onNext={handleFeedbackNext}
+        onDismiss={handleFeedbackDismiss}
       />
 
       <VictoryModal
