@@ -231,3 +231,16 @@ export const countryPools: Record<number, Country[]> = {
     { name: 'Eritrea', code: 'ERI', continent: 'Africa', coordinates: { latitude: 15, longitude: 39 } }
   ]
 };
+
+// Helper function to get all countries flat if needed for a global search/autocomplete
+export const getAllCountries = (): string[] => {
+  return gameData.flatMap(level => level.countries);
+};
+
+// Helper function to get a random country from a specific level
+export const getRandomCountryByLevel = (levelNumber: number): string | null => {
+  const level = gameData.find(l => l.level === levelNumber);
+  if (!level || level.countries.length === 0) return null;
+  const randomIndex = Math.floor(Math.random() * level.countries.length);
+  return level.countries[randomIndex];
+};
