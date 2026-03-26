@@ -1,12 +1,15 @@
-import { View, Text, StyleSheet, useWindowDimensions, ScrollView } from 'react-native';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { useEffect, useState } from 'react';
 import { Country } from '@/data/gameData';
 import * as topojson from 'topojson-client';
 import Svg, { Path } from 'react-native-svg';
+import { geoMercator, geoPath } from 'd3-geo';
+import type { Feature, FeatureCollection } from 'geojson';
 
 interface WorldMapProps {
   availableCountries: Country[];
   selectedCountry: Country | null;
+  incorrectCountries: Country[];
   highlightedContinent: string | null;
   onCountrySelect: (country: Country) => void;
 }
@@ -54,23 +57,14 @@ const countryCodeMap: Record<string, string> = {
   ERI: '232'
 };
 
-interface GeoFeature {
-  id: string;
-  type: string;
-  geometry: {
-    type: string;
-    coordinates: any[];
-  };
-  properties?: any;
-}
-
 export function WorldMap({
   availableCountries,
   selectedCountry,
+  incorrectCountries,
   highlightedContinent,
   onCountrySelect,
 }: WorldMapProps) {
-  const [geographies, setGeographies] = useState<GeoFeature[]>([]);
+  const [geojsonData, setGeojsonData] = useState<FeatureCollection | null>(null);
   const { width: screenWidth } = useWindowDimensions();
 
   useEffect(() => {
@@ -78,19 +72,16 @@ export function WorldMap({
       .then(res => res.json())
       .then(data => {
         // 1. Convert TopoJSON to standard GeoJSON
-        const geojsonData = topojson.feature(data, data.objects.countries) as any;
+        const collection = topojson.feature(data, data.objects.countries) as unknown as FeatureCollection;
 
-        // 2. Safely format the features for rendering
-        if (geojsonData && geojsonData.features) {
-          const features = geojsonData.features.map((feature: any) => ({
+        // 2. Normalise feature IDs to strings so they match countryCodeMap
+        if (collection && collection.features) {
+          const features = collection.features.map((feature: any) => ({
             ...feature,
-            // Grab the actual ISO numeric ID (e.g., "840" for USA) from the TopoJSON
-            // and ensure it's a string so it perfectly matches your countryCodeMap
             id: String(feature.id),
             properties: { ...feature.properties, id: String(feature.id) }
           }));
-          
-          setGeographies(features);
+          setGeojsonData({ ...collection, features });
         }
       })
       .catch(err => console.error('Failed to load map data:', err));
@@ -111,42 +102,15 @@ export function WorldMap({
       return '#3B82F6';
     }
 
+    if (incorrectCountries.some(c => c.code === country.code)) {
+      return '#EF4444';
+    }
+
     if (highlightedContinent === country.continent) {
       return '#FBBF24';
     }
 
     return '#34D399';
-  };
-
-  const pathToSvg = (geometry: any): string => {
-    const path: string[] = [];
-
-    const project = (coords: [number, number]): [number, number] => {
-      const [lon, lat] = coords;
-      return [
-        (lon + 180) / 360 * 960,
-        (90 - lat) / 180 * 500,
-      ];
-    };
-
-    const drawRing = (ring: any[]) => {
-      ring.forEach((point, idx) => {
-        const [x, y] = project(point);
-        if (idx === 0) path.push(`M${x},${y}`);
-        else path.push(`L${x},${y}`);
-      });
-      path.push('Z');
-    };
-
-    if (geometry.type === 'Polygon') {
-      geometry.coordinates.forEach((ring: any[]) => drawRing(ring));
-    } else if (geometry.type === 'MultiPolygon') {
-      geometry.coordinates.forEach((polygon: any[]) => {
-        polygon.forEach((ring: any[]) => drawRing(ring));
-      });
-    }
-
-    return path.join(' ');
   };
 
   const handlePress = (geoId: string) => {
@@ -156,34 +120,47 @@ export function WorldMap({
     }
   };
 
-  const mapWidth = Math.min(screenWidth - 40, 1000);
+  const mapWidth = Math.min(screenWidth - 16, 1200);
   const mapHeight = mapWidth * (500 / 960);
+
+  // Fit the Mercator projection to only the habitable-world bounding box
+  // (lat -56° to 72°) so that Antarctica and the Arctic are excluded.
+  // This makes the main land masses significantly larger and easier to tap.
+  const habitableWorld = {
+    type: 'Feature' as const,
+    geometry: {
+      type: 'Polygon' as const,
+      coordinates: [[
+        [-179.9, -56], [179.9, -56], [179.9, 72],
+        [-179.9, 72], [-179.9, -56],
+      ]],
+    },
+    properties: {},
+  };
+  const projection = geoMercator().fitSize([960, 500], habitableWorld as Feature);
+  const pathGenerator = geoPath().projection(projection);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.instructionText}>Tap a country to select it</Text>
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        showsHorizontalScrollIndicator={false}
-      >
-        <View style={styles.mapWrapper}>
-          <View style={[styles.mapContainer, { width: mapWidth, height: mapHeight }]}>
+      <View style={styles.mapWrapper}>
+        <View style={[styles.mapContainer, { width: mapWidth, height: mapHeight }]}>
             <Svg
               width={mapWidth}
               height={mapHeight}
               viewBox="0 0 960 500"
             >
-              {geographies.map((geo) => {
-                const geoId = geo.properties?.id || geo.id;
+              {geojsonData && geojsonData.features.map((feature: Feature) => {
+                const geoId = feature.properties?.id || feature.id;
                 const country = getCountryByGeoId(geoId);
                 const fillColor = getFillColor(country);
+                const d = pathGenerator(feature);
+
+                if (!d) return null;
 
                 return (
                   <Path
                     key={geoId}
-                    d={pathToSvg(geo.geometry)}
+                    d={d}
                     fill={fillColor}
                     stroke="#FFFFFF"
                     strokeWidth={0.5}
@@ -194,7 +171,6 @@ export function WorldMap({
             </Svg>
           </View>
         </View>
-      </ScrollView>
     </View>
   );
 }
@@ -203,30 +179,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#E0F2FE',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-  },
-  instructionText: {
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    margin: 20,
-    marginBottom: 8,
+    alignItems: 'center',
   },
   mapWrapper: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
   },
   mapContainer: {
     backgroundColor: '#7DD3FC',

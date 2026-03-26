@@ -7,7 +7,7 @@ export default function Index() {
   const [gameStarted, setGameStarted] = useState(false);
 
   if (gameStarted) {
-    return <GameScreen />;
+    return <GameScreen onExit={() => setGameStarted(false)} />;
   }
 
   return (

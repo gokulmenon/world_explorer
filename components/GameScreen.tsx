@@ -1,13 +1,18 @@
 import { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
-import { Lightbulb } from 'lucide-react-native';
+import { Lightbulb, SkipForward } from 'lucide-react-native';
 import { StatusBar } from './StatusBar';
 import { WorldMap } from './WorldMap';
 import { ConfirmationDialog } from './ConfirmationDialog';
+import { FeedbackDialog } from './FeedbackDialog';
 import { VictoryModal } from './VictoryModal';
 import { Country, initializeGame } from '@/data/gameData';
 
-export function GameScreen() {
+interface GameScreenProps {
+  onExit: () => void;
+}
+
+export function GameScreen({ onExit }: GameScreenProps) {
   const [currentLevel, setCurrentLevel] = useState(1);
   const [currentCountryIndex, setCurrentCountryIndex] = useState(0);
   const [selectedCountries, setSelectedCountries] = useState<Country[][]>([]);
@@ -22,6 +27,10 @@ export function GameScreen() {
   const [isComplete, setIsComplete] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [incorrectCountries, setIncorrectCountries] = useState<Country[]>([]);
+  // Separate visible/content so the dialog doesn't flash "Incorrect" while fading out after a correct answer
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
+  const [feedbackContent, setFeedbackContent] = useState<{ isCorrect: boolean; earnedScore?: number }>({ isCorrect: false });
 
   useEffect(() => {
     initGame();
@@ -63,6 +72,8 @@ export function GameScreen() {
     setIsComplete(false);
     setSelectedCountry(null);
     setShowConfirmDialog(false);
+    setIncorrectCountries([]);
+    setFeedbackVisible(false);
   };
 
   const handleCountrySelect = (country: Country) => {
@@ -74,23 +85,37 @@ export function GameScreen() {
     if (!selectedCountry || !targetCountry) return;
 
     const isCorrect = selectedCountry.code === targetCountry.code;
+    const tappedCountry = selectedCountry;
+
+    setShowConfirmDialog(false);
+    setSelectedCountry(null);
 
     if (isCorrect) {
       const timeTaken = Math.floor((Date.now() - questionStartTime) / 1000);
       const baseScore = Math.max(1000 - timeTaken * 10, 100);
       const levelMultiplier = currentLevel;
-      const hintPenalty = hintUsed ? 50 : 0;
+      const hintPenalty = hintUsed ? 250 : 0;
       const earnedScore = Math.max(baseScore * levelMultiplier - hintPenalty, 50);
 
       setScore((prev) => prev + earnedScore);
-      advanceToNextCountry();
+      setFeedbackContent({ isCorrect: true, earnedScore });
+      setFeedbackVisible(true);
     } else {
       setScore((prev) => Math.max(prev - 100, 0));
       setQuestionStartTime((prev) => prev - 20000);
+      setIncorrectCountries((prev) => [...prev, tappedCountry]);
+      setFeedbackContent({ isCorrect: false });
+      setFeedbackVisible(true);
     }
+  };
 
-    setShowConfirmDialog(false);
-    setSelectedCountry(null);
+  const handleFeedbackNext = () => {
+    setFeedbackVisible(false);
+    advanceToNextCountry();
+  };
+
+  const handleFeedbackDismiss = () => {
+    setFeedbackVisible(false);
   };
 
   const handleConfirmNo = () => {
@@ -120,18 +145,23 @@ export function GameScreen() {
     setQuestionTime(0);
     setHintUsed(false);
     setShowingContinent(null);
+    setIncorrectCountries([]);
   };
 
   const handleHint = () => {
     if (!hintUsed && targetCountry) {
       setHintUsed(true);
       setShowingContinent(targetCountry.continent);
-      setScore((prev) => Math.max(prev - 50, 0));
+      setScore((prev) => Math.max(prev - 250, 0));
     }
   };
 
+  const handleSkip = () => {
+    advanceToNextCountry();
+  };
+
   const handleRestart = () => {
-    initGame();
+    onExit();
   };
 
   const handlePlayAgain = () => {
@@ -165,28 +195,48 @@ export function GameScreen() {
         <WorldMap
           availableCountries={currentLevelCountries}
           selectedCountry={selectedCountry}
+          incorrectCountries={incorrectCountries}
           highlightedContinent={showingContinent}
           onCountrySelect={handleCountrySelect}
         />
 
-        <TouchableOpacity
-          style={[styles.hintButton, hintUsed && styles.hintButtonDisabled]}
-          onPress={handleHint}
-          disabled={hintUsed}
-          activeOpacity={0.8}
-        >
-          <Lightbulb size={24} color="#FFFFFF" />
-          <Text style={styles.hintText}>
-            {hintUsed ? 'Hint Used' : 'Hint (-50 pts)'}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.actionBar}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.hintButton, hintUsed && styles.hintButtonDisabled]}
+            onPress={handleHint}
+            disabled={hintUsed}
+            activeOpacity={0.8}
+          >
+            <Lightbulb size={22} color="#FFFFFF" />
+            <Text style={styles.actionButtonText}>
+              {hintUsed ? 'Hint Used' : 'Hint (-250 pts)'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionButton, styles.skipButton]}
+            onPress={handleSkip}
+            activeOpacity={0.8}
+          >
+            <SkipForward size={22} color="#FFFFFF" />
+            <Text style={styles.actionButtonText}>Skip</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ConfirmationDialog
         visible={showConfirmDialog}
-        countryName={selectedCountry?.name || ''}
+        countryName={targetCountry?.name || ''}
         onYes={handleConfirmYes}
         onNo={handleConfirmNo}
+      />
+
+      <FeedbackDialog
+        visible={feedbackVisible}
+        isCorrect={feedbackContent.isCorrect}
+        earnedScore={feedbackContent.earnedScore}
+        onNext={handleFeedbackNext}
+        onDismiss={handleFeedbackDismiss}
       />
 
       <VictoryModal
@@ -229,30 +279,40 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   hintButton: {
-    position: 'absolute',
-    bottom: 40,
-    right: 40,
     backgroundColor: '#8B5CF6',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    minHeight: 56,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
   hintButtonDisabled: {
     backgroundColor: '#9CA3AF',
     opacity: 0.6,
   },
-  hintText: {
+  skipButton: {
+    backgroundColor: '#F59E0B',
+  },
+  actionBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: '#E0F2FE',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    minHeight: 52,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  actionButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
 });
