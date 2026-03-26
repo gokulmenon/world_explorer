@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { Country } from '@/data/gameData';
 import * as topojson from 'topojson-client';
 import Svg, { Path } from 'react-native-svg';
+import { geoMercator, geoPath } from 'd3-geo';
+import type { Feature, FeatureCollection } from 'geojson';
 
 interface WorldMapProps {
   availableCountries: Country[];
@@ -54,23 +56,13 @@ const countryCodeMap: Record<string, string> = {
   ERI: '232'
 };
 
-interface GeoFeature {
-  id: string;
-  type: string;
-  geometry: {
-    type: string;
-    coordinates: any[];
-  };
-  properties?: any;
-}
-
 export function WorldMap({
   availableCountries,
   selectedCountry,
   highlightedContinent,
   onCountrySelect,
 }: WorldMapProps) {
-  const [geographies, setGeographies] = useState<GeoFeature[]>([]);
+  const [geojsonData, setGeojsonData] = useState<FeatureCollection | null>(null);
   const { width: screenWidth } = useWindowDimensions();
 
   useEffect(() => {
@@ -78,19 +70,16 @@ export function WorldMap({
       .then(res => res.json())
       .then(data => {
         // 1. Convert TopoJSON to standard GeoJSON
-        const geojsonData = topojson.feature(data, data.objects.countries) as any;
+        const collection = topojson.feature(data, data.objects.countries) as unknown as FeatureCollection;
 
-        // 2. Safely format the features for rendering
-        if (geojsonData && geojsonData.features) {
-          const features = geojsonData.features.map((feature: any) => ({
+        // 2. Normalise feature IDs to strings so they match countryCodeMap
+        if (collection && collection.features) {
+          const features = collection.features.map((feature: any) => ({
             ...feature,
-            // Grab the actual ISO numeric ID (e.g., "840" for USA) from the TopoJSON
-            // and ensure it's a string so it perfectly matches your countryCodeMap
             id: String(feature.id),
             properties: { ...feature.properties, id: String(feature.id) }
           }));
-          
-          setGeographies(features);
+          setGeojsonData({ ...collection, features });
         }
       })
       .catch(err => console.error('Failed to load map data:', err));
@@ -118,37 +107,6 @@ export function WorldMap({
     return '#34D399';
   };
 
-  const pathToSvg = (geometry: any): string => {
-    const path: string[] = [];
-
-    const project = (coords: [number, number]): [number, number] => {
-      const [lon, lat] = coords;
-      return [
-        (lon + 180) / 360 * 960,
-        (90 - lat) / 180 * 500,
-      ];
-    };
-
-    const drawRing = (ring: any[]) => {
-      ring.forEach((point, idx) => {
-        const [x, y] = project(point);
-        if (idx === 0) path.push(`M${x},${y}`);
-        else path.push(`L${x},${y}`);
-      });
-      path.push('Z');
-    };
-
-    if (geometry.type === 'Polygon') {
-      geometry.coordinates.forEach((ring: any[]) => drawRing(ring));
-    } else if (geometry.type === 'MultiPolygon') {
-      geometry.coordinates.forEach((polygon: any[]) => {
-        polygon.forEach((ring: any[]) => drawRing(ring));
-      });
-    }
-
-    return path.join(' ');
-  };
-
   const handlePress = (geoId: string) => {
     const country = getCountryByGeoId(geoId);
     if (country && availableCountryCodes.has(geoId)) {
@@ -158,6 +116,14 @@ export function WorldMap({
 
   const mapWidth = Math.min(screenWidth - 40, 1000);
   const mapHeight = mapWidth * (500 / 960);
+
+  // Build a d3-geo Mercator projection fitted to the loaded world data.
+  // geoMercator + geoPath handle antimeridian crossing natively, which
+  // prevents the horizontal-line tearing artifacts from naïve equirectangular math.
+  const projection = geojsonData
+    ? geoMercator().fitSize([960, 500], geojsonData)
+    : null;
+  const pathGenerator = projection ? geoPath().projection(projection) : null;
 
   return (
     <View style={styles.container}>
@@ -175,15 +141,18 @@ export function WorldMap({
               height={mapHeight}
               viewBox="0 0 960 500"
             >
-              {geographies.map((geo) => {
-                const geoId = geo.properties?.id || geo.id;
+              {geojsonData && pathGenerator && geojsonData.features.map((feature: Feature) => {
+                const geoId = feature.properties?.id || feature.id;
                 const country = getCountryByGeoId(geoId);
                 const fillColor = getFillColor(country);
+                const d = pathGenerator(feature);
+
+                if (!d) return null;
 
                 return (
                   <Path
                     key={geoId}
-                    d={pathToSvg(geo.geometry)}
+                    d={d}
                     fill={fillColor}
                     stroke="#FFFFFF"
                     strokeWidth={0.5}
