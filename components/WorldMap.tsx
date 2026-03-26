@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, useWindowDimensions, ScrollView } from 'react-native';
 import { useEffect, useState } from 'react';
 import { Country } from '@/data/gameData';
+import * as topojson from 'topojson-client';
 
 interface WorldMapProps {
   availableCountries: Country[];
@@ -76,13 +77,19 @@ export function WorldMap({
     fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
       .then(res => res.json())
       .then(data => {
-        if (data.objects?.countries?.geometries) {
-          const features = data.objects.countries.geometries.map((geo: any, idx: number) => ({
-            id: String(idx),
-            type: 'Feature',
-            geometry: geo,
-            properties: { id: String(idx) }
+        // 1. Convert TopoJSON to standard GeoJSON
+        const geojsonData = topojson.feature(data, data.objects.countries) as any;
+
+        // 2. Safely format the features for rendering
+        if (geojsonData && geojsonData.features) {
+          const features = geojsonData.features.map((feature: any) => ({
+            ...feature,
+            // Grab the actual ISO numeric ID (e.g., "840" for USA) from the TopoJSON
+            // and ensure it's a string so it perfectly matches your countryCodeMap
+            id: String(feature.id),
+            properties: { ...feature.properties, id: String(feature.id) }
           }));
+          
           setGeographies(features);
         }
       })
