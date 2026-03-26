@@ -29,6 +29,7 @@ export function StatusBar({
   return (
     <View style={styles.container}>
       <View style={styles.leftSection}>
+        <Text style={styles.appName}>🌍 World Explorer</Text>
         <View style={styles.levelRow}>
           <Text style={styles.levelText}>Level {level}</Text>
           <View style={styles.questionTimerInline}>
@@ -73,6 +74,13 @@ const styles = StyleSheet.create({
   },
   leftSection: {
     flex: 1,
+  },
+  appName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3B82F6',
+    letterSpacing: 0.3,
+    marginBottom: 2,
   },
   levelRow: {
     flexDirection: 'row',
