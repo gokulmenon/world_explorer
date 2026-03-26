@@ -1,6 +1,5 @@
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { useState } from 'react';
-import { ComposableMap, Geographies, Geography, ZoomableGroup } from 'react-simple-maps';
+import { View, Text, StyleSheet, useWindowDimensions, ScrollView } from 'react-native';
+import { useEffect, useState } from 'react';
 import { Country } from '@/data/gameData';
 
 interface WorldMapProps {
@@ -9,9 +8,6 @@ interface WorldMapProps {
   highlightedContinent: string | null;
   onCountrySelect: (country: Country) => void;
 }
-
-const geoUrl = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const countryCodeMap: Record<string, string> = {
   USA: '840', CAN: '124', MEX: '484', BRA: '076', ARG: '032',
@@ -56,13 +52,42 @@ const countryCodeMap: Record<string, string> = {
   ERI: '232'
 };
 
+interface GeoFeature {
+  id: string;
+  type: string;
+  geometry: {
+    type: string;
+    coordinates: any[];
+  };
+  properties?: any;
+}
+
 export function WorldMap({
   availableCountries,
   selectedCountry,
   highlightedContinent,
   onCountrySelect,
 }: WorldMapProps) {
+  const [geographies, setGeographies] = useState<GeoFeature[]>([]);
   const [hoveredGeo, setHoveredGeo] = useState<string | null>(null);
+  const { width: screenWidth } = useWindowDimensions();
+
+  useEffect(() => {
+    fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+      .then(res => res.json())
+      .then(data => {
+        if (data.objects?.countries?.geometries) {
+          const features = data.objects.countries.geometries.map((geo: any, idx: number) => ({
+            id: String(idx),
+            type: 'Feature',
+            geometry: geo,
+            properties: { id: String(idx) }
+          }));
+          setGeographies(features);
+        }
+      })
+      .catch(err => console.error('Failed to load map data:', err));
+  }, []);
 
   const availableCountryCodes = new Set(
     availableCountries.map(c => countryCodeMap[c.code]).filter(Boolean)
@@ -72,10 +97,8 @@ export function WorldMap({
     return availableCountries.find(c => countryCodeMap[c.code] === geoId) || null;
   };
 
-  const getFillColor = (geoId: string, country: Country | null): string => {
-    if (!country || !availableCountryCodes.has(geoId)) {
-      return '#E5E7EB';
-    }
+  const getFillColor = (country: Country | null, geoId: string): string => {
+    if (!country) return '#E5E7EB';
 
     if (selectedCountry?.code === country.code) {
       return '#3B82F6';
@@ -92,64 +115,90 @@ export function WorldMap({
     return '#34D399';
   };
 
-  const handleGeographyClick = (geo: any) => {
-    const geoId = geo.id || geo.properties?.id;
-    const country = getCountryByGeoId(geoId);
+  const pathToSvg = (geometry: any, scale: number, translate: [number, number]): string => {
+    const path: string[] = [];
 
+    const project = (coords: [number, number]): [number, number] => {
+      return [
+        (coords[0] - translate[0]) * scale,
+        (translate[1] - coords[1]) * scale
+      ];
+    };
+
+    const drawRing = (ring: any[]) => {
+      ring.forEach((point, idx) => {
+        const [x, y] = project(point);
+        if (idx === 0) path.push(`M${x},${y}`);
+        else path.push(`L${x},${y}`);
+      });
+      path.push('Z');
+    };
+
+    if (geometry.type === 'Polygon') {
+      geometry.coordinates.forEach((ring: any[]) => drawRing(ring));
+    } else if (geometry.type === 'MultiPolygon') {
+      geometry.coordinates.forEach((polygon: any[]) => {
+        polygon.forEach((ring: any[]) => drawRing(ring));
+      });
+    }
+
+    return path.join(' ');
+  };
+
+  const handleClick = (geoId: string) => {
+    const country = getCountryByGeoId(geoId);
     if (country && availableCountryCodes.has(geoId)) {
       onCountrySelect(country);
     }
   };
 
+  const mapWidth = Math.min(screenWidth - 40, 1000);
+  const mapHeight = mapWidth * 0.5625;
+  const scale = mapWidth / 960;
+  const translate: [number, number] = [480, 300];
+
   return (
     <View style={styles.container}>
       <Text style={styles.instructionText}>Tap a country to select it</Text>
 
-      <View style={styles.mapWrapper}>
-        <ComposableMap
-          projection="geoMercator"
-          projectionConfig={{
-            scale: 147,
-          }}
-          width={800}
-          height={450}
-          style={{ width: '100%', height: '100%' }}
-        >
-          <ZoomableGroup center={[0, 20]} zoom={1}>
-            <Geographies geography={geoUrl}>
-              {({ geographies }) =>
-                geographies.map((geo) => {
-                  const geoId = geo.id || geo.properties?.id;
-                  const country = getCountryByGeoId(geoId);
-                  const isClickable = country && availableCountryCodes.has(geoId);
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
+      >
+        <View style={styles.mapWrapper}>
+          <svg
+            width={mapWidth}
+            height={mapHeight}
+            viewBox={`0 0 960 600`}
+            style={{ backgroundColor: '#7DD3FC', borderRadius: 12 }}
+          >
+            {geographies.map((geo) => {
+              const geoId = geo.properties?.id || geo.id;
+              const country = getCountryByGeoId(geoId);
+              const isClickable = country && availableCountryCodes.has(geoId);
+              const fillColor = getFillColor(country, geoId);
 
-                  return (
-                    <Geography
-                      key={geo.rsmKey}
-                      geography={geo}
-                      fill={getFillColor(geoId, country)}
-                      stroke="#FFFFFF"
-                      strokeWidth={0.5}
-                      style={{
-                        default: { outline: 'none' },
-                        hover: {
-                          outline: 'none',
-                          fill: isClickable ? '#10B981' : '#E5E7EB',
-                          cursor: isClickable ? 'pointer' : 'default'
-                        },
-                        pressed: { outline: 'none' }
-                      }}
-                      onMouseEnter={() => isClickable && setHoveredGeo(geoId)}
-                      onMouseLeave={() => setHoveredGeo(null)}
-                      onClick={() => handleGeographyClick(geo)}
-                    />
-                  );
-                })
-              }
-            </Geographies>
-          </ZoomableGroup>
-        </ComposableMap>
-      </View>
+              return (
+                <path
+                  key={geoId}
+                  d={pathToSvg(geo.geometry, 1, translate)}
+                  fill={fillColor}
+                  stroke="#FFFFFF"
+                  strokeWidth="0.5"
+                  style={{
+                    cursor: isClickable ? 'pointer' : 'default',
+                    transition: 'fill 0.2s ease',
+                  }}
+                  onMouseEnter={() => isClickable && setHoveredGeo(geoId)}
+                  onMouseLeave={() => setHoveredGeo(null)}
+                  onClick={() => handleClick(geoId)}
+                />
+              );
+            })}
+          </svg>
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -158,7 +207,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#E0F2FE',
-    padding: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
   },
   instructionText: {
     textAlign: 'center',
@@ -169,14 +223,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
-    marginBottom: 16,
+    margin: 20,
+    marginBottom: 8,
   },
   mapWrapper: {
-    flex: 1,
-    backgroundColor: '#7DD3FC',
-    borderRadius: 12,
-    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
   },
 });
