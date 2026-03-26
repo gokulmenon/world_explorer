@@ -232,15 +232,27 @@ export const countryPools: Record<number, Country[]> = {
   ]
 };
 
-// Helper function to get all countries flat if needed for a global search/autocomplete
-export const getAllCountries = (): string[] => {
-  return gameData.flatMap(level => level.countries);
-};
+export function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
 
-// Helper function to get a random country from a specific level
-export const getRandomCountryByLevel = (levelNumber: number): string | null => {
-  const level = gameData.find(l => l.level === levelNumber);
-  if (!level || level.countries.length === 0) return null;
-  const randomIndex = Math.floor(Math.random() * level.countries.length);
-  return level.countries[randomIndex];
-};
+export function selectRandomCountries(level: number, count: number = 5): Country[] {
+  const pool = countryPools[level];
+  const shuffled = shuffleArray(pool);
+  return shuffled.slice(0, count);
+}
+
+export function initializeGame(): Country[][] {
+  return [
+    selectRandomCountries(1),
+    selectRandomCountries(2),
+    selectRandomCountries(3),
+    selectRandomCountries(4),
+    selectRandomCountries(5),
+  ];
+}
