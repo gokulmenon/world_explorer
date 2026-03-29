@@ -2,9 +2,16 @@ import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { useEffect, useState } from 'react';
 import { Country } from '@/data/gameData';
 import * as topojson from 'topojson-client';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { geoMercator, geoPath } from 'd3-geo';
 import type { Feature, FeatureCollection } from 'geojson';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  clamp,
+} from 'react-native-reanimated';
 
 interface WorldMapProps {
   availableCountries: Country[];
@@ -57,6 +64,9 @@ const countryCodeMap: Record<string, string> = {
   ERI: '232'
 };
 
+const MIN_SCALE = 1;
+const MAX_SCALE = 6;
+
 export function WorldMap({
   availableCountries,
   selectedCountry,
@@ -67,14 +77,19 @@ export function WorldMap({
   const [geojsonData, setGeojsonData] = useState<FeatureCollection | null>(null);
   const { width: screenWidth } = useWindowDimensions();
 
+  // Zoom / pan shared values
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
   useEffect(() => {
     fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
       .then(res => res.json())
       .then(data => {
-        // 1. Convert TopoJSON to standard GeoJSON
         const collection = topojson.feature(data, data.objects.countries) as unknown as FeatureCollection;
-
-        // 2. Normalise feature IDs to strings so they match countryCodeMap
         if (collection && collection.features) {
           const features = collection.features.map((feature: any) => ({
             ...feature,
@@ -87,45 +102,82 @@ export function WorldMap({
       .catch(err => console.error('Failed to load map data:', err));
   }, []);
 
-  const availableCountryCodes = new Set(
-    availableCountries.map(c => countryCodeMap[c.code]).filter(Boolean)
-  );
-
-  const getCountryByGeoId = (geoId: string): Country | null => {
-    return availableCountries.find(c => countryCodeMap[c.code] === geoId) || null;
-  };
-
-  const getFillColor = (country: Country | null): string => {
-    if (!country) return '#E5E7EB';
-
-    if (selectedCountry?.code === country.code) {
-      return '#3B82F6';
-    }
-
-    if (incorrectCountries.some(c => c.code === country.code)) {
-      return '#EF4444';
-    }
-
-    if (highlightedContinent === country.continent) {
-      return '#FBBF24';
-    }
-
-    return '#34D399';
-  };
-
-  const handlePress = (geoId: string) => {
-    const country = getCountryByGeoId(geoId);
-    if (country && availableCountryCodes.has(geoId)) {
-      onCountrySelect(country);
-    }
-  };
-
   const mapWidth = Math.min(screenWidth - 16, 1200);
   const mapHeight = mapWidth * (500 / 960);
 
-  // Fit the Mercator projection to only the habitable-world bounding box
-  // (lat -56° to 72°) so that Antarctica and the Arctic are excluded.
-  // This makes the main land masses significantly larger and easier to tap.
+  // Clamp translation so the map cannot be panned completely off-screen
+  const maxTranslateX = mapWidth * (MAX_SCALE - 1) / 2;
+  const maxTranslateY = mapHeight * (MAX_SCALE - 1) / 2;
+
+  // ── Pinch gesture ────────────────────────────────────────────────────────
+  const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+      savedScale.value = scale.value;
+    })
+    .onUpdate((e: { scale: number }) => {
+      scale.value = clamp(savedScale.value * e.scale, MIN_SCALE, MAX_SCALE);
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+      // Snap back to 1 if scale went below threshold
+      if (scale.value < 1.05) {
+        scale.value = withSpring(1);
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedScale.value = 1;
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      }
+    });
+
+  // ── Pan gesture (only moves the map when zoomed in) ──────────────────────
+  const panGesture = Gesture.Pan()
+    .minDistance(4)
+    .onStart(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    })
+    .onUpdate((e: { translationX: number; translationY: number }) => {
+      if (scale.value <= 1.05) return;
+      translateX.value = clamp(
+        savedTranslateX.value + e.translationX,
+        -maxTranslateX,
+        maxTranslateX,
+      );
+      translateY.value = clamp(
+        savedTranslateY.value + e.translationY,
+        -maxTranslateY,
+        maxTranslateY,
+      );
+    })
+    .onEnd(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  // ── Double-tap to reset zoom ──────────────────────────────────────────────
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      scale.value = withSpring(1);
+      translateX.value = withSpring(0);
+      translateY.value = withSpring(0);
+      savedScale.value = 1;
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
+    });
+
+  const composed = Gesture.Simultaneous(pinchGesture, panGesture);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  // ── Map projection ────────────────────────────────────────────────────────
   const habitableWorld = {
     type: 'Feature' as const,
     geometry: {
@@ -140,37 +192,88 @@ export function WorldMap({
   const projection = geoMercator().fitSize([960, 500], habitableWorld as Feature);
   const pathGenerator = geoPath().projection(projection);
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const availableCountryCodes = new Set(
+    availableCountries.map(c => countryCodeMap[c.code]).filter(Boolean)
+  );
+
+  const getCountryByGeoId = (geoId: string): Country | null =>
+    availableCountries.find(c => countryCodeMap[c.code] === geoId) || null;
+
+  const getFillColor = (country: Country | null): string => {
+    if (!country) return '#E5E7EB';
+    if (selectedCountry?.code === country.code) return '#3B82F6';
+    if (incorrectCountries.some(c => c.code === country.code)) return '#EF4444';
+    if (highlightedContinent === country.continent) return '#FBBF24';
+    return '#34D399';
+  };
+
+  const handlePress = (geoId: string) => {
+    const country = getCountryByGeoId(geoId);
+    if (country && availableCountryCodes.has(geoId)) {
+      onCountrySelect(country);
+    }
+  };
+
+  // Small countries that need a circle hit-target
+  const smallCountryMarkers = availableCountries
+    .filter(c => c.isSmall && countryCodeMap[c.code])
+    .map(c => {
+      const geoId = countryCodeMap[c.code];
+      const feature = geojsonData?.features.find(
+        (f: Feature) => (f.properties?.id ?? String(f.id)) === geoId
+      );
+      if (!feature) return null;
+      const centroid = pathGenerator.centroid(feature as Feature);
+      if (!centroid || isNaN(centroid[0]) || isNaN(centroid[1])) return null;
+      return { country: c, geoId, cx: centroid[0], cy: centroid[1] };
+    })
+    .filter(Boolean) as { country: Country; geoId: string; cx: number; cy: number }[];
+
   return (
     <View style={styles.container}>
       <View style={styles.mapWrapper}>
-        <View style={[styles.mapContainer, { width: mapWidth, height: mapHeight }]}>
-            <Svg
-              width={mapWidth}
-              height={mapHeight}
-              viewBox="0 0 960 500"
-            >
-              {geojsonData && geojsonData.features.map((feature: Feature) => {
-                const geoId = feature.properties?.id || feature.id;
-                const country = getCountryByGeoId(geoId);
-                const fillColor = getFillColor(country);
-                const d = pathGenerator(feature);
+        <GestureDetector gesture={Gesture.Race(doubleTapGesture, composed)}>
+          <Animated.View style={[{ width: mapWidth, height: mapHeight }, animatedStyle]}>
+            <View style={[styles.mapContainer, { width: mapWidth, height: mapHeight }]}>
+              <Svg width={mapWidth} height={mapHeight} viewBox="0 0 960 500">
+                {/* Country path fills */}
+                {geojsonData && geojsonData.features.map((feature: Feature) => {
+                  const geoId = String(feature.properties?.id ?? feature.id);
+                  const country = getCountryByGeoId(geoId);
+                  const fillColor = getFillColor(country);
+                  const d = pathGenerator(feature);
+                  if (!d) return null;
+                  return (
+                    <Path
+                      key={geoId}
+                      d={d}
+                      fill={fillColor}
+                      stroke="#FFFFFF"
+                      strokeWidth={0.5}
+                      onPress={() => handlePress(geoId)}
+                    />
+                  );
+                })}
 
-                if (!d) return null;
-
-                return (
-                  <Path
-                    key={geoId}
-                    d={d}
-                    fill={fillColor}
+                {/* Circle hit-targets for small / hard-to-tap countries */}
+                {geojsonData && smallCountryMarkers.map(({ country, geoId, cx, cy }) => (
+                  <Circle
+                    key={`marker-${country.code}`}
+                    cx={cx}
+                    cy={cy}
+                    r={10}
+                    fill={getFillColor(country)}
                     stroke="#FFFFFF"
-                    strokeWidth={0.5}
+                    strokeWidth={1.5}
                     onPress={() => handlePress(geoId)}
                   />
-                );
-              })}
-            </Svg>
-          </View>
-        </View>
+                ))}
+              </Svg>
+            </View>
+          </Animated.View>
+        </GestureDetector>
+      </View>
     </View>
   );
 }
@@ -185,6 +288,7 @@ const styles = StyleSheet.create({
   mapWrapper: {
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   mapContainer: {
     backgroundColor: '#7DD3FC',
