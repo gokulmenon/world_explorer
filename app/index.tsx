@@ -18,7 +18,7 @@ export default function Index() {
         </View>
 
         <Text style={styles.title}>Adit's World Explorer</Text>
-        <Text style={styles.subtitle}>Master Geography Across 5 Levels</Text>
+        <Text style={styles.subtitle}>Master Geography Across 10 Levels</Text>
 
         <View style={styles.featuresContainer}>
           <View style={styles.feature}>
@@ -57,7 +57,7 @@ export default function Index() {
             1. Find the target country on the map{'\n'}
             2. Tap to select and confirm your choice{'\n'}
             3. Complete 5 countries per level{'\n'}
-            4. Progress through 5 difficulty levels{'\n'}
+            4. Progress through 10 difficulty levels{'\n'}
             5. Use hints to highlight continents
           </Text>
         </View>

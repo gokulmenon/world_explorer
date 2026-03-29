@@ -127,7 +127,7 @@ export function GameScreen({ onExit }: GameScreenProps) {
     const nextIndex = currentCountryIndex + 1;
 
     if (nextIndex >= 5) {
-      if (currentLevel >= 5) {
+      if (currentLevel >= 10) {
         setIsComplete(true);
         return;
       }
