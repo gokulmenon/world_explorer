@@ -69,6 +69,7 @@ export function FlagsSprintScreen({ onExit }: FlagsSprintScreenProps) {
   };
 
   const handleFlagPress = (country: FlagCountry) => {
+    if (feedbackVisible || isComplete) return;
     const target = countries[roundIndex];
     if (!target) return;
     const isCorrect = country.code3 === target.code3;
@@ -79,7 +80,7 @@ export function FlagsSprintScreen({ onExit }: FlagsSprintScreenProps) {
       setScore((prev) => prev + earnedScore);
       setFeedbackContent({ isCorrect: true, earnedScore });
     } else {
-      setScore((prev) => Math.max(prev - 100, 0));
+      setScore((prev) => prev - 100);
       setFeedbackContent({ isCorrect: false });
     }
     setFeedbackVisible(true);
@@ -200,6 +201,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     gap: 16,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
   },
   flagButton: {
     width: '45%',

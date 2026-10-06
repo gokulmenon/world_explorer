@@ -78,7 +78,7 @@ export function CapitalsScreen({ onExit }: CapitalsScreenProps) {
       setScore((prev) => prev + earnedScore);
       setFeedbackContent({ isCorrect: true, earnedScore });
     } else {
-      setScore((prev) => Math.max(prev - 100, 0));
+      setScore((prev) => prev - 100);
       setFeedbackContent({ isCorrect: false });
     }
     setFeedbackVisible(true);

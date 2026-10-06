@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { USState, usStates } from '@/data/usStates';
 import * as topojson from 'topojson-client';
 import Svg, { Path, Circle } from 'react-native-svg';
-import { geoMercator, geoPath } from 'd3-geo';
+import { geoAlbersUsa, geoPath } from 'd3-geo';
 import type { Feature, FeatureCollection } from 'geojson';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -57,7 +57,7 @@ export function USMap({
       .catch(err => console.error('Failed to load US map data:', err));
   }, []);
 
-  const mapWidth = Math.min(screenWidth - 16, 1200);
+  const mapWidth = Math.min(screenWidth - 16, 900);
   const mapHeight = mapWidth * (600 / 960);
 
   // Clamp translation so the map cannot be panned completely off-screen
@@ -133,7 +133,7 @@ export function USMap({
 
   // ── Map projection (fit to the loaded states geometry) ───────────────────
   const emptyCollection: FeatureCollection = { type: 'FeatureCollection', features: [] };
-  const projection = geoMercator().fitSize([960, 600], geojsonData ?? emptyCollection);
+  const projection = geoAlbersUsa().fitSize([960, 600], geojsonData ?? emptyCollection);
   const pathGenerator = geoPath().projection(projection);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
