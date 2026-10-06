@@ -5,13 +5,16 @@ import { StatusBar } from './StatusBar';
 import { USMap } from './USMap';
 import { FeedbackDialog } from './FeedbackDialog';
 import { VictoryModal } from './VictoryModal';
+import { LevelCompleteModal } from './LevelCompleteModal';
 import { USState, selectRandomStates } from '@/data/usStates';
 
 interface USStatesScreenProps {
   onExit: () => void;
 }
 
-const ROUNDS = 10;
+const ROUNDS_PER_LEVEL = 5;
+const TOTAL_LEVELS = 10;
+const TOTAL_ROUNDS = ROUNDS_PER_LEVEL * TOTAL_LEVELS;
 
 export function USStatesScreen({ onExit }: USStatesScreenProps) {
   const [states, setStates] = useState<USState[]>([]);
@@ -24,6 +27,7 @@ export function USStatesScreen({ onExit }: USStatesScreenProps) {
   const [hintUsed, setHintUsed] = useState(false);
   const [showingRegion, setShowingRegion] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
+  const [levelCompleteVisible, setLevelCompleteVisible] = useState(false);
   const [selectedState, setSelectedState] = useState<USState | null>(null);
   const [incorrectStates, setIncorrectStates] = useState<USState[]>([]);
   const [feedbackVisible, setFeedbackVisible] = useState(false);
@@ -37,13 +41,13 @@ export function USStatesScreen({ onExit }: USStatesScreenProps) {
   }, []);
 
   useEffect(() => {
-    if (!isComplete && !feedbackVisible) {
+    if (!isComplete && !feedbackVisible && !levelCompleteVisible) {
       const questionInterval = setInterval(() => {
         setQuestionTime(Math.floor((Date.now() - questionStartTime) / 1000));
       }, 1000);
       return () => clearInterval(questionInterval);
     }
-  }, [questionStartTime, isComplete, feedbackVisible]);
+  }, [questionStartTime, isComplete, feedbackVisible, levelCompleteVisible]);
 
   useEffect(() => {
     if (!isComplete) {
@@ -55,7 +59,8 @@ export function USStatesScreen({ onExit }: USStatesScreenProps) {
   }, [gameStartTime, isComplete]);
 
   const initGame = () => {
-    setStates(selectRandomStates(ROUNDS));
+    // All 50 states, shuffled — 10 levels of 5, every state appears exactly once.
+    setStates(selectRandomStates(50));
     setRoundIndex(0);
     setScore(0);
     setQuestionStartTime(Date.now());
@@ -65,13 +70,14 @@ export function USStatesScreen({ onExit }: USStatesScreenProps) {
     setHintUsed(false);
     setShowingRegion(null);
     setIsComplete(false);
+    setLevelCompleteVisible(false);
     setSelectedState(null);
     setIncorrectStates([]);
     setFeedbackVisible(false);
   };
 
   const handleStateSelect = (state: USState) => {
-    if (feedbackVisible || isComplete) return;
+    if (feedbackVisible || isComplete || levelCompleteVisible) return;
     const target = states[roundIndex];
     if (!target) return;
 
@@ -96,7 +102,7 @@ export function USStatesScreen({ onExit }: USStatesScreenProps) {
   const handleFeedbackNext = () => {
     setFeedbackVisible(false);
     const nextIndex = roundIndex + 1;
-    if (nextIndex >= ROUNDS) {
+    if (nextIndex >= TOTAL_ROUNDS) {
       setIsComplete(true);
       return;
     }
@@ -107,6 +113,13 @@ export function USStatesScreen({ onExit }: USStatesScreenProps) {
     setShowingRegion(null);
     setSelectedState(null);
     setIncorrectStates([]);
+    if (nextIndex % ROUNDS_PER_LEVEL === 0) {
+      setLevelCompleteVisible(true);
+    }
+  };
+
+  const handleLevelCompleteNext = () => {
+    setLevelCompleteVisible(false);
   };
 
   const handleFeedbackDismiss = () => {
@@ -135,13 +148,18 @@ export function USStatesScreen({ onExit }: USStatesScreenProps) {
   }
 
   const target = states[roundIndex];
+  const level = Math.floor(roundIndex / ROUNDS_PER_LEVEL) + 1;
+  const levelRoundIndex = roundIndex % ROUNDS_PER_LEVEL;
+  // When the level-complete modal is visible, roundIndex already points at the
+  // next level's first question, so the finished level is roundIndex / per-level.
+  const completedLevel = Math.floor(roundIndex / ROUNDS_PER_LEVEL);
 
   return (
     <View style={styles.container}>
       <StatusBar
-        level={1}
-        countryIndex={roundIndex}
-        totalCountries={ROUNDS}
+        level={level}
+        countryIndex={levelRoundIndex}
+        totalCountries={ROUNDS_PER_LEVEL}
         questionTime={questionTime}
         totalTime={totalTime}
         score={score}
@@ -189,8 +207,17 @@ export function USStatesScreen({ onExit }: USStatesScreenProps) {
         visible={feedbackVisible}
         isCorrect={feedbackContent.isCorrect}
         earnedScore={feedbackContent.earnedScore}
+        penaltyScore={100}
         onNext={handleFeedbackNext}
         onDismiss={handleFeedbackDismiss}
+      />
+
+      <LevelCompleteModal
+        visible={levelCompleteVisible}
+        level={completedLevel}
+        totalLevels={TOTAL_LEVELS}
+        score={score}
+        onNextLevel={handleLevelCompleteNext}
       />
 
       <VictoryModal

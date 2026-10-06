@@ -23,7 +23,7 @@ export default function USStates() {
         <View style={styles.featuresContainer}>
           <View style={styles.feature}>
             <Text style={styles.featureEmoji}>🇺🇸</Text>
-            <Text style={styles.featureText}>10 states per run</Text>
+            <Text style={styles.featureText}>10 levels, 5 states each</Text>
           </View>
 
           <View style={styles.feature}>

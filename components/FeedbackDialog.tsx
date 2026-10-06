@@ -4,6 +4,7 @@ interface FeedbackDialogProps {
   visible: boolean;
   isCorrect: boolean;
   earnedScore?: number;
+  penaltyScore?: number;
   onNext: () => void;
   onDismiss: () => void;
 }
@@ -12,6 +13,7 @@ export function FeedbackDialog({
   visible,
   isCorrect,
   earnedScore,
+  penaltyScore,
   onNext,
   onDismiss,
 }: FeedbackDialogProps) {
@@ -31,8 +33,11 @@ export function FeedbackDialog({
           <Text style={styles.message}>
             {isCorrect
               ? `Great job! +${earnedScore ?? 0} points`
-              : "That's not the right country. Try again!"}
+              : 'Not quite — try again!'}
           </Text>
+          {!isCorrect && penaltyScore ? (
+            <Text style={styles.penaltyText}>-{penaltyScore} points</Text>
+          ) : null}
           <TouchableOpacity
             style={[styles.button, isCorrect ? styles.nextButton : styles.tryAgainButton]}
             onPress={isCorrect ? onNext : onDismiss}
@@ -86,8 +91,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#6B7280',
     textAlign: 'center',
-    marginBottom: 28,
+    marginBottom: 12,
     fontWeight: '500',
+  },
+  penaltyText: {
+    fontSize: 32,
+    color: '#EF4444',
+    textAlign: 'center',
+    marginBottom: 20,
+    fontWeight: '800',
   },
   button: {
     width: '100%',

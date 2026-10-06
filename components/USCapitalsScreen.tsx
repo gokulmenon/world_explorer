@@ -155,6 +155,7 @@ export function USCapitalsScreen({ onExit }: USCapitalsScreenProps) {
         visible={feedbackVisible}
         isCorrect={feedbackContent.isCorrect}
         earnedScore={feedbackContent.earnedScore}
+        penaltyScore={100}
         onNext={handleFeedbackNext}
         onDismiss={handleFeedbackDismiss}
       />

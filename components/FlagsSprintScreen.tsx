@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { StatusBar } from './StatusBar';
 import { FeedbackDialog } from './FeedbackDialog';
 import { VictoryModal } from './VictoryModal';
+import { LevelCompleteModal } from './LevelCompleteModal';
 import {
   FlagCountry,
   flagEmoji,
@@ -14,7 +15,9 @@ interface FlagsSprintScreenProps {
   onExit: () => void;
 }
 
-const ROUNDS = 10;
+const ROUNDS_PER_LEVEL = 5;
+const TOTAL_LEVELS = 10;
+const TOTAL_ROUNDS = ROUNDS_PER_LEVEL * TOTAL_LEVELS;
 
 export function FlagsSprintScreen({ onExit }: FlagsSprintScreenProps) {
   const [countries, setCountries] = useState<FlagCountry[]>([]);
@@ -26,6 +29,7 @@ export function FlagsSprintScreen({ onExit }: FlagsSprintScreenProps) {
   const [questionTime, setQuestionTime] = useState(0);
   const [totalTime, setTotalTime] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [levelCompleteVisible, setLevelCompleteVisible] = useState(false);
   const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackContent, setFeedbackContent] = useState<{
     isCorrect: boolean;
@@ -37,13 +41,13 @@ export function FlagsSprintScreen({ onExit }: FlagsSprintScreenProps) {
   }, []);
 
   useEffect(() => {
-    if (!isComplete && !feedbackVisible) {
+    if (!isComplete && !feedbackVisible && !levelCompleteVisible) {
       const questionInterval = setInterval(() => {
         setQuestionTime(Math.floor((Date.now() - questionStartTime) / 1000));
       }, 1000);
       return () => clearInterval(questionInterval);
     }
-  }, [questionStartTime, isComplete, feedbackVisible]);
+  }, [questionStartTime, isComplete, feedbackVisible, levelCompleteVisible]);
 
   useEffect(() => {
     if (!isComplete) {
@@ -55,7 +59,8 @@ export function FlagsSprintScreen({ onExit }: FlagsSprintScreenProps) {
   }, [gameStartTime, isComplete]);
 
   const initGame = () => {
-    const picked = selectSprintCountries(ROUNDS);
+    // 50 questions: all 40 countries shuffled, plus 10 more from a reshuffle.
+    const picked = [...selectSprintCountries(40), ...selectSprintCountries(10)];
     setCountries(picked);
     setRoundIndex(0);
     setOptions(buildFlagOptions(picked[0]));
@@ -65,11 +70,12 @@ export function FlagsSprintScreen({ onExit }: FlagsSprintScreenProps) {
     setQuestionTime(0);
     setTotalTime(0);
     setIsComplete(false);
+    setLevelCompleteVisible(false);
     setFeedbackVisible(false);
   };
 
   const handleFlagPress = (country: FlagCountry) => {
-    if (feedbackVisible || isComplete) return;
+    if (feedbackVisible || isComplete || levelCompleteVisible) return;
     const target = countries[roundIndex];
     if (!target) return;
     const isCorrect = country.code3 === target.code3;
@@ -89,7 +95,7 @@ export function FlagsSprintScreen({ onExit }: FlagsSprintScreenProps) {
   const handleFeedbackNext = () => {
     setFeedbackVisible(false);
     const nextIndex = roundIndex + 1;
-    if (nextIndex >= ROUNDS) {
+    if (nextIndex >= TOTAL_ROUNDS) {
       setIsComplete(true);
       return;
     }
@@ -97,6 +103,13 @@ export function FlagsSprintScreen({ onExit }: FlagsSprintScreenProps) {
     setOptions(buildFlagOptions(countries[nextIndex]));
     setQuestionStartTime(Date.now());
     setQuestionTime(0);
+    if (nextIndex % ROUNDS_PER_LEVEL === 0) {
+      setLevelCompleteVisible(true);
+    }
+  };
+
+  const handleLevelCompleteNext = () => {
+    setLevelCompleteVisible(false);
   };
 
   const handleFeedbackDismiss = () => {
@@ -112,13 +125,18 @@ export function FlagsSprintScreen({ onExit }: FlagsSprintScreenProps) {
   }
 
   const target = countries[roundIndex];
+  const level = Math.floor(roundIndex / ROUNDS_PER_LEVEL) + 1;
+  const levelRoundIndex = roundIndex % ROUNDS_PER_LEVEL;
+  // When the level-complete modal is visible, roundIndex already points at the
+  // next level's first question, so the finished level is roundIndex / per-level.
+  const completedLevel = Math.floor(roundIndex / ROUNDS_PER_LEVEL);
 
   return (
     <View style={styles.container}>
       <StatusBar
-        level={1}
-        countryIndex={roundIndex}
-        totalCountries={ROUNDS}
+        level={level}
+        countryIndex={levelRoundIndex}
+        totalCountries={ROUNDS_PER_LEVEL}
         questionTime={questionTime}
         totalTime={totalTime}
         score={score}
@@ -149,8 +167,17 @@ export function FlagsSprintScreen({ onExit }: FlagsSprintScreenProps) {
         visible={feedbackVisible}
         isCorrect={feedbackContent.isCorrect}
         earnedScore={feedbackContent.earnedScore}
+        penaltyScore={100}
         onNext={handleFeedbackNext}
         onDismiss={handleFeedbackDismiss}
+      />
+
+      <LevelCompleteModal
+        visible={levelCompleteVisible}
+        level={completedLevel}
+        totalLevels={TOTAL_LEVELS}
+        score={score}
+        onNextLevel={handleLevelCompleteNext}
       />
 
       <VictoryModal

@@ -18,12 +18,12 @@ export default function FlagsSprint() {
         </View>
 
         <Text style={styles.title}>Flags Sprint</Text>
-        <Text style={styles.subtitle}>10 Flags. Beat The Clock.</Text>
+        <Text style={styles.subtitle}>50 Flags. 10 Levels. Beat The Clock.</Text>
 
         <View style={styles.featuresContainer}>
           <View style={styles.feature}>
             <Text style={styles.featureEmoji}>🏁</Text>
-            <Text style={styles.featureText}>10 timed flag rounds</Text>
+            <Text style={styles.featureText}>10 levels, 5 timed rounds each</Text>
           </View>
 
           <View style={styles.feature}>

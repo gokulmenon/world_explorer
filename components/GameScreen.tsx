@@ -235,6 +235,7 @@ export function GameScreen({ onExit }: GameScreenProps) {
         visible={feedbackVisible}
         isCorrect={feedbackContent.isCorrect}
         earnedScore={feedbackContent.earnedScore}
+        penaltyScore={100}
         onNext={handleFeedbackNext}
         onDismiss={handleFeedbackDismiss}
       />
