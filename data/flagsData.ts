@@ -59,6 +59,7 @@ export const flagsPool: FlagCountry[] = [
   { name: 'Colombia', code3: 'COL', iso2: 'CO' },
   { name: 'Chile', code3: 'CHL', iso2: 'CL' },
   { name: 'Peru', code3: 'PER', iso2: 'PE' },
+  { name: 'Denmark', code3: 'DNK', iso2: 'DK' },
 ];
 
 export function shuffleArray<T>(array: T[]): T[] {
