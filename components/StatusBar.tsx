@@ -9,6 +9,7 @@ interface StatusBarProps {
   totalTime: number;
   score: number;
   onRestart: () => void;
+  progressLabel?: string;
 }
 
 export function StatusBar({
@@ -19,6 +20,7 @@ export function StatusBar({
   totalTime,
   score,
   onRestart,
+  progressLabel = 'Country',
 }: StatusBarProps) {
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -38,7 +40,7 @@ export function StatusBar({
           </View>
         </View>
         <Text style={styles.progressText}>
-          Country {countryIndex + 1} of {totalCountries}
+          {progressLabel} {countryIndex + 1} of {totalCountries}
         </Text>
       </View>
 
